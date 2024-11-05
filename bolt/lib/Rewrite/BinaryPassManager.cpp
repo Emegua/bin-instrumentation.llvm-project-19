@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "bolt/Rewrite/BinaryPassManager.h"
+#include "bolt/Passes/AddSanitizerpass.h"
 #include "bolt/Passes/ADRRelaxationPass.h"
 #include "bolt/Passes/Aligner.h"
 #include "bolt/Passes/AllocCombiner.h"
@@ -267,6 +268,11 @@ static cl::opt<bool> ShortenInstructions("shorten-instructions",
                                          cl::desc("shorten instructions"),
                                          cl::init(true),
                                          cl::cat(BoltOptCategory));
+
+static cl::opt<bool> AddressSanitizer("address-sanitizer",
+                                          cl::desc("run memory address sanitizer pass"),
+                                          cl::init(true), 
+                                          cl::cat(BoltOptCategory));
 } // namespace opts
 
 namespace llvm {
@@ -384,6 +390,9 @@ Error BinaryFunctionPassManager::runAllPasses(BinaryContext &BC) {
 
   Manager.registerPass(std::make_unique<ShortenInstructions>(NeverPrint),
                        opts::ShortenInstructions);
+
+  Manager.registerPass(std::make_unique<AddressSanitizer>(NeverPrint),
+                        opts::AddressSanitizer);
 
   Manager.registerPass(std::make_unique<RemoveNops>(NeverPrint),
                        !opts::KeepNops);
