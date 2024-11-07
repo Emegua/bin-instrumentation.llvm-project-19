@@ -1443,6 +1443,12 @@ public:
     return false;
   }
 
+  virtual bool instrumentMemoryAccess(MCInst &Inst,
+                                  const MCSubtargetInfo &STI) const {
+    llvm_unreachable("not implemented");
+    return false;
+  }
+
   /// Convert a move instruction into a conditional move instruction, given a
   /// condition code.
   virtual bool

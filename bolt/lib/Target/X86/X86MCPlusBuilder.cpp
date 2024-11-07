@@ -85,7 +85,7 @@ static InstructionListType createIncMemory(const MCSymbol *Target,
 #define GET_INSTRINFO_MEM_OPERAND_SIZE
 #include "X86GenInstrInfo.inc"
 
-class X86MCPlusBuilder : public MCPlusBuilder {
+class X86MCPlusBuilder : public MCPlusBuilder { 
 public:
   using MCPlusBuilder::MCPlusBuilder;
 
@@ -1658,6 +1658,265 @@ public:
     LLVM_DEBUG(Inst.dump());
     llvm_unreachable("not implemented");
   }
+
+  // #TODO ASAN instrumentation
+  bool isMemoryOperand(const MCInst &Inst, unsigned OpNum) const {
+    const MCInstrDesc &Desc = Info->get(Inst.getOpcode());
+    
+    // Skip if operand index is out of range
+    if (OpNum >= Inst.getNumOperands())
+      return false;
+
+    // Check if instruction has memory access
+    if (!Desc.mayLoad() && !Desc.mayStore())
+      return false;
+
+    if (OpNum + 4 <= Inst.getNumOperands()) {
+      const MCOperand &BaseOp = Inst.getOperand(OpNum);
+      const MCOperand &ScaleOp = Inst.getOperand(OpNum + 1);
+      const MCOperand &IndexOp = Inst.getOperand(OpNum + 2);
+      const MCOperand &DispOp = Inst.getOperand(OpNum + 3);
+
+      // Validate operand types
+      return BaseOp.isReg() && 
+            ScaleOp.isImm() && 
+            IndexOp.isReg() && 
+            (DispOp.isImm() || DispOp.isExpr());
+    }
+
+    return false;
+  }
+
+  
+  // #TODO ASAN instrumentation
+
+  uint64_t getMemoryAccessSize(const MCInst &Inst) const {
+    const MCInstrDesc &Desc = Info->get(Inst.getOpcode());
+    StringRef Name = Info->getName(Inst.getOpcode());
+
+    // Check if the instruction is a push operation
+    if (isPush(Inst)) {
+      return getPushSize(Inst);
+    }
+
+    // Check if the instruction is a pop operation
+    if (isPop(Inst)) {
+      return getPopSize(Inst);
+    }
+
+    // Define a mapping of opcodes to sizes
+    switch (Inst.getOpcode()) {
+      // MOV instructions
+      case X86::MOV8mr:  return 1;
+      case X86::MOV16mr: return 2;
+      case X86::MOV32mr: return 4;
+      case X86::MOV64mr: return 8;
+      case X86::MOV8mi:  return 1;
+      case X86::MOV16mi: return 2;
+      case X86::MOV32mi: return 4;
+      case X86::MOV64mi32: return 8;
+      case X86::MOV8rm:  return 1;
+      case X86::MOV16rm: return 2;
+      case X86::MOV32rm: return 4;
+      case X86::MOV64rm: return 8;
+      case X86::MOV8ri:  return 1;
+      case X86::MOV16ri: return 2;
+      case X86::MOV32ri: return 4;
+      case X86::MOV64ri: return 8;
+      case X86::MOV64ri32: return 8;
+
+      // MOVZX instructions
+      case X86::MOVZX16rr8:   return 1;
+      case X86::MOVZX32rr8:   return 1;
+      case X86::MOVZX32rr16:  return 2;
+
+      // CMP instructions
+      case X86::CMP8rr:       return 1;
+      case X86::CMP16rr:      return 2;
+      case X86::CMP32rr:      return 4;
+      case X86::CMP64rr:      return 8;
+
+      // TEST instructions
+      case X86::TEST8rr:      return 1;
+      case X86::TEST16rr:     return 2;
+      case X86::TEST32rr:     return 4;
+      case X86::TEST64rr:     return 8;
+
+      // ADD instructions
+      case X86::ADD8rr:       return 1;
+      case X86::ADD16rr:      return 2;
+      case X86::ADD32rr:      return 4;
+      case X86::ADD64rr:      return 8;
+
+      // SUB instructions
+      case X86::SUB8rr:       return 1;
+      case X86::SUB16rr:      return 2;
+      case X86::SUB32rr:      return 4;
+      case X86::SUB64rr:      return 8;
+
+      // AND instructions
+      case X86::AND8rr:       return 1;
+      case X86::AND16rr:      return 2;
+      case X86::AND32rr:      return 4;
+      case X86::AND64rr:      return 8;
+
+      // OR instructions
+      case X86::OR8rr:        return 1;
+      case X86::OR16rr:       return 2;
+      case X86::OR32rr:       return 4;
+      case X86::OR64rr:       return 8;
+
+      // XOR instructions
+      case X86::XOR8rr:       return 1;
+      case X86::XOR16rr:      return 2;
+      case X86::XOR32rr:      return 4;
+      case X86::XOR64rr:      return 8;
+
+      // Default case
+      default:
+        break;
+    }
+
+    // Check for memory operand size
+    for (unsigned i = 0; i < Desc.getNumOperands(); ++i) {
+      if (Desc.operands()[i].OperandType == MCOI::OPERAND_MEMORY) {
+        return Desc.getSize();
+      }
+    }
+
+    // Check for vector/move operations
+    // Vector/SIMD operations
+    
+    // for (unsigned i = 0; i < Inst.getNumOperands(); ++i) {
+    //   const MCOperand &Op = Inst.getOperand(i);
+    //   if (Op.isReg()) {
+    //     unsigned Reg = Op.getReg();
+    //     if (MRI->getRegClass(X86::VR128RegClassID).contains(Reg)) return 16;
+    //     if (MRI->getRegClass(X86::VR256RegClassID).contains(Reg)) return 32;
+    //     if (MRI->getRegClass(X86::VR512RegClassID).contains(Reg)) return 64;
+    //     if (MRI->getRegClass(X86::GR64RegClassID).contains(Reg)) return 8;
+    //     if (MRI->getRegClass(X86::GR32RegClassID).contains(Reg)) return 4;
+    //     if (MRI->getRegClass(X86::GR16RegClassID).contains(Reg)) return 2;
+    //     if (MRI->getRegClass(X86::GR8RegClassID).contains(Reg)) return 1;
+    //   }
+    // }
+    // #TODO Not COmplete
+    if (Name.starts_with("VMOV") || Name.starts_with("MOV")) {
+      for (unsigned i = 0; i < Inst.getNumOperands(); ++i) {
+        const MCOperand &Op = Inst.getOperand(i);
+        if (Op.isReg()) {
+          unsigned Reg = Op.getReg();
+          // Check vector register classes
+          if (Info->get(Inst.getOpcode()).operands()[i].RegClass == X86::VR512RegClassID)
+            return 64;
+          if (Info->get(Inst.getOpcode()).operands()[i].RegClass == X86::VR256RegClassID)
+            return 32;
+          if (Info->get(Inst.getOpcode()).operands()[i].RegClass == X86::VR128RegClassID)
+            return 16;
+        }
+      }
+    }
+
+    // Default to instruction descriptor size
+    if (Desc.mayLoad() || Desc.mayStore()) {
+      return Desc.getSize();
+    }
+
+    LLVM_DEBUG(dbgs() << "Warning: Could not determine size for " << Info->getName(Inst.getOpcode()) << "\n");
+    return 0; // Conservative default
+  }
+
+  // #TODO ASAN instrumentation
+  uint64_t getMemoryAccessAddress(const MCInst &Inst) const {
+    const MCInstrDesc &Desc = Info->get(Inst.getOpcode());
+    int MemOpNo = getMemoryOperandNo(Inst);
+
+    if (MemOpNo == -1) {
+      LLVM_DEBUG(dbgs() << "No memory operand found for instruction: " 
+                        << Info->getName(Inst.getOpcode()) << "\n");
+      return 0;
+    }
+
+    // x86 memory operand components
+    unsigned BaseReg = 0;
+    unsigned IndexReg = 0;
+    uint8_t ScaleImm = 1;
+    int64_t DispImm = 0;
+
+    // Parse standard x86 memory operand format
+    if (MemOpNo + 4 <= Inst.getNumOperands()) {
+      BaseReg = Inst.getOperand(MemOpNo).getReg();
+      ScaleImm = Inst.getOperand(MemOpNo + 1).getImm();
+      IndexReg = Inst.getOperand(MemOpNo + 2).getReg();
+      if (Inst.getOperand(MemOpNo + 3).isImm())
+        DispImm = Inst.getOperand(MemOpNo + 3).getImm();
+    }
+
+    // LLVM_DEBUG({
+      dbgs() << "Memory operand components: "
+                << "  Base: " << (BaseReg ? Info->getName(BaseReg) : "none") << " |"
+                << "  Index: " << (IndexReg ? Info->getName(IndexReg) : "none") << " |"
+                << "  Scale: " << ScaleImm << " |"
+                << "  DispImm: " << DispImm << "\n";
+    // });
+
+    // Compute effective address
+    return DispImm;
+  }
+
+  // #TODO ASAN instrumentation
+  bool instrumentMemoryAccess(MCInst &Inst, 
+                                  const MCSubtargetInfo &STI) const override {
+    const MCInstrDesc &Desc = Info->get(Inst.getOpcode());
+    if (!Desc.mayLoad() && !Desc.mayStore())
+      return false;
+
+    StringRef InstName = Info->getName(Inst.getOpcode());
+    uint64_t AccessSize = getMemoryAccessSize(Inst);
+    uint64_t Address = getMemoryAccessAddress(Inst);
+    uint64_t ShadowAddr = (Address >> 3) + 0x7fff8000; // Shadow memory mapping #FIXME
+    
+    // MCInst *NewInst = new MCInst(Check);
+    // Inst.insert(Inst.begin(), MCOperand::createInst(NewInst));
+    // NewInst = new MCInst(Branch);
+    // Inst.insert(Inst.begin() + 1, MCOperand::createInst(NewInst));
+    // // Create shadow memory check
+    // MCInst Check;
+    // Check.setOpcode(X86::CMP8mi);
+    // Check.addOperand(MCOperand::createReg(X86::RIP));        // BaseReg
+    // Check.addOperand(MCOperand::createImm(1));               // ScaleAmt
+    // Check.addOperand(MCOperand::createReg(X86::NoRegister)); // IndexReg
+    // Check.addOperand(MCOperand::createImm(ShadowAddr));      // Displacement
+    // Check.addOperand(MCOperand::createReg(X86::NoRegister)); // AddrSegmentReg
+    // Check.addOperand(MCOperand::createImm(0));               // Compare with 0
+
+    // // Create error handling branch
+    // MCInst Branch;
+    // Branch.setOpcode(X86::JCC_1);
+    // Branch.addOperand(MCOperand::createExpr(
+    //     MCSymbolRefExpr::create(getOrCreateErrorHandler(), 
+    //                           MCSymbolRefExpr::VK_None,
+    //                           *Ctx)));
+    // Branch.addOperand(MCOperand::createImm(X86::COND_NE));
+
+    // // Debug output
+    // LLVM_DEBUG({
+      dbgs() << "Instrumenting memory access: | "
+            << "  Instruction: " << InstName << " | "
+            << "  Type: " << (Desc.mayLoad() ? "READ " : "") 
+            << (Desc.mayStore() ? "WRITE" : "") << " | "
+            << "  Size: " << AccessSize << " bytes | "
+            << "  Address: 0x" << Twine::utohexstr(Address) << " | "
+            << "  Shadow: 0x" << Twine::utohexstr(ShadowAddr) << "\n";
+    // });
+
+    // // Insert instrumentation
+    // Inst.insert(Inst.begin(), Check);
+    // Inst.insert(Inst.begin() + 1, Branch);
+
+    return true;
+  }
+
 
   bool shortenInstruction(MCInst &Inst,
                           const MCSubtargetInfo &STI) const override {

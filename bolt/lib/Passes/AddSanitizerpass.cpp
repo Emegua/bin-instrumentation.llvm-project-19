@@ -11,57 +11,16 @@ bool AddressSanitizer::isMemoryAccess(const MCInst &Inst, const BinaryContext &B
   return Desc.mayLoad() || Desc.mayStore();
 }
 
-uint64_t AddressSanitizer::getAccessSize(const MCInst &Inst, const BinaryContext &BC) {
-  const MCInstrDesc &Desc = BC.MII->get(Inst.getOpcode());
-  StringRef Name = BC.MII->getName(Inst.getOpcode());
-
-  if (Name.ends_with("b"))  return 1;  // byte
-  if (Name.ends_with("w"))  return 2;  // word
-  if (Name.ends_with("l"))  return 4;  // dword
-  if (Name.ends_with("q"))  return 8;  // qword
-
-  return 8; // Default to 8 bytes for now #FIXME
-}
-
-uint64_t AddressSanitizer::getAccessAddress(const MCInst &Inst, const BinaryContext &BC) {
-  return 0xdeadbeef; // Placeholder
-}
-
-void AddressSanitizer::instrumentMemoryAccess(BinaryFunction &BF, MCInst &Inst) {
-  NumInstrumentedInsts++;
-
-  const MCInstrDesc &Desc = BF.getBinaryContext().MII->get(Inst.getOpcode());
-  StringRef InstName = BF.getBinaryContext().MII->getName(Inst.getOpcode());
-
-  dbgs() << "Inst: " << InstName << " | ";
-  dbgs() << "Type: ";
-  if (Desc.mayLoad())
-    dbgs() << "READ ";
-  if (Desc.mayStore())
-    dbgs() << "WRITE ";
-  dbgs() << "| ";
-
-  uint64_t AccessSize = getAccessSize(Inst, BF.getBinaryContext());
-  uint64_t Address = getAccessAddress(Inst, BF.getBinaryContext());
-  uint64_t ShadowAddr = (Address >> kShadowScale) + kShadowOffset;
-
-  dbgs() << "Size: " << AccessSize << "B | ";
-  dbgs() << "Addr: 0x" << Twine::utohexstr(Address) << " | ";
-  dbgs() << "Shadow: 0x" << Twine::utohexstr(ShadowAddr) << "\n";
-
-  dbgs() << "Details: ";
-  dbgs() << "Opcode: " << Inst.getOpcode() << " | ";
-  dbgs() << "Operands: ";
-  for (unsigned i = 0; i < Inst.getNumOperands(); ++i) {
-    const MCOperand &Op = Inst.getOperand(i);
-    dbgs() << "Op" << i << ": ";
-    if (Op.isReg())
-      dbgs() << "Reg " << Op.getReg();
-    else if (Op.isImm())
-      dbgs() << "Imm " << Op.getImm();
-    dbgs() << " ";
-  }
-  dbgs() << "\n";
+bool isUserFunction(const BinaryFunction &BF) {
+  // Example logic based on function name
+  StringRef Name = BF.getPrintName();
+  // Skip functions starting with "__" (common for system/library functions)
+  if (Name.starts_with("__"))
+    return false;
+  // Skip other known non-user functions
+  if (Name == "init" || Name == "fini")
+    return false;
+  return true;
 }
 
 Error AddressSanitizer::runOnFunctions(BinaryContext &BC) {
@@ -69,14 +28,22 @@ Error AddressSanitizer::runOnFunctions(BinaryContext &BC) {
 
   for (auto &BFI : BC.getBinaryFunctions()) {
     BinaryFunction &BF = BFI.second;
-    if (!BF.isSimple()) {
-      dbgs() << "Found not a simple function " << BF.getPrintName() << "\n";
-    }
 
+    if (!isUserFunction(BF) && BF.getPrintName() != "main") {
+      dbgs() << "Skipping non-user function: " << BF.getPrintName() << "\n";
+      continue;
+    }
+  
+    dbgs() << "Instrumenting function: " << BF.getPrintName() << "\n";
     for (auto &BB : BF) {
       for (auto &Inst : BB) {
         if (isMemoryAccess(Inst, BC))
-          instrumentMemoryAccess(BF, Inst);
+          // instrumentMemoryAccess(BF, Inst);
+          if (!BC.MIB->instrumentMemoryAccess(Inst, *BC.STI))
+          {
+            dbgs() << "Failed to instrument instruction in " << BF.getPrintName() << "\n";
+          }
+          NumInstrumentedInsts++;
       }
     }
   }

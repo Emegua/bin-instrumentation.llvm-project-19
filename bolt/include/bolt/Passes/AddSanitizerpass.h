@@ -3,6 +3,7 @@
 
 #include "bolt/Passes/BinaryPasses.h"
 
+
 namespace llvm {
 namespace bolt {
 
@@ -16,14 +17,7 @@ class AddressSanitizer : public BinaryFunctionPass {
   private:
     // Mem access detection
     bool isMemoryAccess(const MCInst &Inst, const BinaryContext &BC);
-    uint64_t getAccessSize(const MCInst &Inst, const BinaryContext &BC);
-    uint64_t getAccessAddress(const MCInst &Inst, const BinaryContext &BC);
 
-
-    // instrumentation logic
-    void instrumentMemoryAccess(BinaryFunction &BF, MCInst &Inst);
-    void insertShadowCheck(BinaryFunction &BF, MCInst &Inst, uint64_t ShadowAddr);
-    
     // Runtime support
     void insertAsanInit(BinaryContext &BC);
     void insertErrorReporting(BinaryFunction &BF, MCInst &Inst);
