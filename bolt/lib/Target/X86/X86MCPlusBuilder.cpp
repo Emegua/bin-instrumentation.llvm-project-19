@@ -16,6 +16,7 @@
 #include "X86MCSymbolizer.h"
 #include "bolt/Core/MCPlus.h"
 #include "bolt/Core/MCPlusBuilder.h"
+// #include "bolt/Passes/LivenessAnalysis.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCFixupKindInfo.h"
@@ -1864,59 +1865,20 @@ public:
     return DispImm;
   }
 
-  // #TODO ASAN instrumentation
-  bool instrumentMemoryAccess(MCInst &Inst, 
-                                  const MCSubtargetInfo &STI) const override {
+    // #TODO ASAN instrumentation
+  bool instrumentMemoryAccess(MCInst &Inst, const MCSubtargetInfo &STI) const {
     const MCInstrDesc &Desc = Info->get(Inst.getOpcode());
     if (!Desc.mayLoad() && !Desc.mayStore())
       return false;
-
-    StringRef InstName = Info->getName(Inst.getOpcode());
+  
     uint64_t AccessSize = getMemoryAccessSize(Inst);
     uint64_t Address = getMemoryAccessAddress(Inst);
-    uint64_t ShadowAddr = (Address >> 3) + 0x7fff8000; // Shadow memory mapping #FIXME
+    uint64_t ShadowAddr = (Address >> 3) + 0x7fff8000; // Shadow memory mapping
+  
+    // Determine live registers
     
-    // MCInst *NewInst = new MCInst(Check);
-    // Inst.insert(Inst.begin(), MCOperand::createInst(NewInst));
-    // NewInst = new MCInst(Branch);
-    // Inst.insert(Inst.begin() + 1, MCOperand::createInst(NewInst));
-    // // Create shadow memory check
-    // MCInst Check;
-    // Check.setOpcode(X86::CMP8mi);
-    // Check.addOperand(MCOperand::createReg(X86::RIP));        // BaseReg
-    // Check.addOperand(MCOperand::createImm(1));               // ScaleAmt
-    // Check.addOperand(MCOperand::createReg(X86::NoRegister)); // IndexReg
-    // Check.addOperand(MCOperand::createImm(ShadowAddr));      // Displacement
-    // Check.addOperand(MCOperand::createReg(X86::NoRegister)); // AddrSegmentReg
-    // Check.addOperand(MCOperand::createImm(0));               // Compare with 0
-
-    // // Create error handling branch
-    // MCInst Branch;
-    // Branch.setOpcode(X86::JCC_1);
-    // Branch.addOperand(MCOperand::createExpr(
-    //     MCSymbolRefExpr::create(getOrCreateErrorHandler(), 
-    //                           MCSymbolRefExpr::VK_None,
-    //                           *Ctx)));
-    // Branch.addOperand(MCOperand::createImm(X86::COND_NE));
-
-    // // Debug output
-    // LLVM_DEBUG({
-      dbgs() << "Instrumenting memory access: | "
-            << "  Instruction: " << InstName << " | "
-            << "  Type: " << (Desc.mayLoad() ? "READ " : "") 
-            << (Desc.mayStore() ? "WRITE" : "") << " | "
-            << "  Size: " << AccessSize << " bytes | "
-            << "  Address: 0x" << Twine::utohexstr(Address) << " | "
-            << "  Shadow: 0x" << Twine::utohexstr(ShadowAddr) << "\n";
-    // });
-
-    // // Insert instrumentation
-    // Inst.insert(Inst.begin(), Check);
-    // Inst.insert(Inst.begin() + 1, Branch);
-
     return true;
   }
-
 
   bool shortenInstruction(MCInst &Inst,
                           const MCSubtargetInfo &STI) const override {

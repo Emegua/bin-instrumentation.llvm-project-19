@@ -1448,6 +1448,38 @@ public:
     llvm_unreachable("not implemented");
     return false;
   }
+  class LivenessAnalysis;
+
+  virtual MCPhysReg getAsanShadowRegister() const {
+    llvm_unreachable("not implemented");
+    return 0;
+  }
+
+  virtual ArrayRef<MCPhysReg> getAsanCallerSavedRegs() const {
+    llvm_unreachable("not implemented");
+    return {};
+  }
+
+  virtual bool isAsanCalleeSaved(MCPhysReg Reg) const {
+    llvm_unreachable("not implemented");
+    return false;
+  }
+
+  virtual MCPhysReg findFreeRegisterAt(const MCInst &Inst, 
+                                      const LivenessAnalysis &LA,
+                                      const BitVector &ReservedRegs) const {
+    llvm_unreachable("not implemented"); 
+    return 0;
+  }
+
+  virtual bool isRegisterAvailable(MCPhysReg Reg,
+                                  const MCInst &Inst,
+                                  const LivenessAnalysis &LA, 
+                                  const BitVector &ReservedRegs) const {
+    llvm_unreachable("not implemented");
+    return false;
+  }
+
 
   /// Convert a move instruction into a conditional move instruction, given a
   /// condition code.
